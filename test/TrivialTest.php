@@ -17,29 +17,56 @@ class TrivialTest extends TestCase
      */
     private static function checkAndFeedWindowData($file, &$readPos, &$windowBegin, &$windowData, &$windowSize, $needSize)
     {
-        echo json_encode([
-                'readPos' => $readPos,
-                'windowBegin' => $windowBegin,
-                'windowSize' => $windowSize,
-                'needSize' => $needSize,
-            ]) . PHP_EOL;
+//        echo json_encode([
+//                'loc' => 'checkAndFeedWindowData',
+//                'readPos' => $readPos,
+//                'windowBegin' => $windowBegin,
+//                'windowSize' => $windowSize,
+//                'needSize' => $needSize,
+//            ]) . PHP_EOL;
 
         while ($windowBegin + $windowSize - $readPos < $needSize)
         {
             $readData = fread($file, self::READ_BLOCK_SIZE);
-            $readSize = strlen($readData);
-            if ($readData === false || $readSize === 0)
+            if ($readData === false)
             {
-                throw new Exception();
+                throw new Exception("readData is false");
+            }
+            $readSize = strlen($readData);
+            if ($readSize === 0)
+            {
+                throw new Exception("readSize is zero");
             }
             $windowData .= $readData;
             $windowSize += $readSize;
         }
     }
 
-    private static function checkAndTrimWindowData()
+    private static function checkAndDiscardWindowData($file, &$readPos, &$windowBegin, &$windowData, &$windowSize, $needSize)
     {
-        // TODO
+//        echo json_encode([
+//                'loc' => 'checkAndDiscardWindowData',
+//                'readPos' => $readPos,
+//                'windowBegin' => $windowBegin,
+//                'windowSize' => $windowSize,
+//                'needSize' => $needSize,
+//            ]) . PHP_EOL;
+
+        while ($windowBegin + self::READ_BLOCK_SIZE < $readPos)
+        {
+            $windowData = substr($windowData, self::READ_BLOCK_SIZE);
+            $windowBegin += self::READ_BLOCK_SIZE;
+            $windowSize -= self::READ_BLOCK_SIZE;
+
+//            echo json_encode([
+//                    'loc' => 'checkAndDiscardWindowData',
+//                    'readPos' => $readPos,
+//                    'windowBegin' => $windowBegin,
+//                    'windowSize' => $windowSize,
+//                    'needSize' => $needSize,
+//                ]) . PHP_EOL;
+        }
+
     }
 
     /**
@@ -59,6 +86,8 @@ class TrivialTest extends TestCase
 
         $fileHeaderData = substr($windowData, $readPos - $windowBegin, $fileHeaderSize);
         $readPos += $fileHeaderSize;
+
+        self::checkAndDiscardWindowData($file, $readPos, $windowBegin, $windowData, $windowSize, $needSize);
 
         return ['data' => $fileHeaderData];
     }
@@ -81,6 +110,8 @@ class TrivialTest extends TestCase
         $unpacked = unpack('Vtimestamp/Ctype/VserverId/VeventLength/VnextPosition/vflags', $windowData, $readPos - $windowBegin);
         $readPos += $eventHeaderSize;
 
+        self::checkAndDiscardWindowData($file, $readPos, $windowBegin, $windowData, $windowSize, $needSize);
+
         return $unpacked;
     }
 
@@ -95,20 +126,21 @@ class TrivialTest extends TestCase
         $windowData = '';
         $windowSize = 0;
         echo json_encode(['type' => 'begin']) . PHP_EOL;
-        echo json_encode(['readPos' => $readPos]) . PHP_EOL;
+        echo json_encode(['readPos' => $readPos]) . PHP_EOL. PHP_EOL;
 
         //
         $fileHeader = $this->readFileHeader($file, $readPos, $windowBegin, $windowData, $windowSize);
         $this->assertEquals("\xfebin", $fileHeader['data']);
-        echo json_encode(['type' => 'fileHeader', 'fileHeader' => $fileHeader]) . PHP_EOL;
-        echo json_encode(['readPos' => $readPos]) . PHP_EOL;
+        echo json_encode(['type' => 'fileHeader', 'fileHeader' => bin2hex($fileHeader['data'])]) . PHP_EOL;
+        echo json_encode(['readPos' => $readPos]) . PHP_EOL. PHP_EOL;
 
         //
-        for($count = 0; $count < 100; $count++)
+//        for($count = 0; $count < 100; $count++)
+            for(;;)
         {
             $eventHeader = $this->readEventHeader($file, $readPos, $windowBegin, $windowData, $windowSize);
-            echo json_encode(['type' => 'eventHeader', 'eventHeader' => $eventHeader]) . PHP_EOL;
-            echo json_encode(['readPos' => $readPos]) . PHP_EOL;
+//            echo json_encode(['type' => 'eventHeader', 'eventHeader' => $eventHeader]) . PHP_EOL;
+//            echo json_encode(['readPos' => $readPos]) . PHP_EOL. PHP_EOL;
             $readPos += $eventHeader['eventLength'] - 19;
         }
 
